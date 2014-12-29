@@ -4,12 +4,21 @@ import theano.tensor as T
 
 def iter_data(*data, **kwargs):
     size = kwargs.get('size', 128)
-    batches = data[0].shape[0] / size + 1
+    if type(data[0]) is list:
+        n_rows = len(data[0])
+    else:
+        n_rows = data[0].shape[0]
+
+    batches = n_rows / size + 1
     for b in range(batches):
         start = b * size
         end = (b + 1) * size
+        end = min(end, n_rows)
+        if start == end:
+            break
         if len(data) == 1:
-            yield data[0][start:end]
+            ret = data[0][start:end]
+            yield ret
         else:
             yield tuple([d[start:end] for d in data]) 
 
@@ -28,6 +37,9 @@ def shuffle(*data):
 
 def floatX(X):
     return np.asarray(X, dtype=theano.config.floatX)
+
+def intX(X):
+    return np.asarray(X, dtype='int32')
 
 def sharedX(X, dtype=theano.config.floatX):
     return theano.shared(np.asarray(X, dtype=dtype))

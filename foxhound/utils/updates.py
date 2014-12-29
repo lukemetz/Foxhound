@@ -25,10 +25,13 @@ class Regularizer(object):
 			p = p * (desired/ (1e-7 + norms))
 		return p
 
-	def regularize(self, p):
+	def gradient_regularize(self, p, g):
+		g += p * self.l2
+		g += T.sgn(p) * self.l1
+		return g
+
+	def weight_regularize(self, p):
 		p = self.max_norm(p, self.maxnorm)
-		p -= p * self.l2
-		p -= self.l1
 		return p
 
 
@@ -52,8 +55,9 @@ class SGD(Update):
 		grads = T.grad(cost, params)
 		grads = clip_norms(grads, self.clipnorm)
 		for p,g in zip(params,grads):
+			g = self.regularizer.gradient_regularize(p, g)
 			updated_p = p - self.lr * g
-			updated_p = self.regularizer.regularize(updated_p)
+			updated_p = self.regularizer.weight_regularize(updated_p)
 			updates.append((p, updated_p))
 		return updates
 
@@ -69,12 +73,13 @@ class Momentum(Update):
 		grads = T.grad(cost, params)
 		grads = clip_norms(grads, self.clipnorm)
 		for p,g in zip(params,grads):
+			g = self.regularizer.gradient_regularize(p, g)
 			m = theano.shared(p.get_value() * 0.)
 			v = (self.momentum * m) - (self.lr * g)
 			updates.append((m, v))
 
 			updated_p = p + v
-			updated_p = self.regularizer.regularize(updated_p)
+			updated_p = self.regularizer.weight_regularize(updated_p)
 			updates.append((p, updated_p))
 		return updates
 
@@ -90,12 +95,13 @@ class NAG(Update):
 		grads = T.grad(cost, params)
 		grads = clip_norms(grads, self.clipnorm)
 		for p,g in zip(params,grads):
+			g = self.regularizer.gradient_regularize(p, g)
 			m = theano.shared(p.get_value() * 0.)
 			v = (self.momentum * m) - (self.lr * g)
 			updates.append((m,v))
 
 			updated_p = p + self.momentum * v - self.lr * g
-			updated_p = self.regularizer.regularize(updated_p)
+			updated_p = self.regularizer.weight_regularize(updated_p)
 			updates.append((p, updated_p))
 		return updates
 
@@ -111,12 +117,13 @@ class RMSprop(Update):
 		grads = T.grad(cost, params)
 		grads = clip_norms(grads, self.clipnorm)
 		for p,g in zip(params,grads):
+			g = self.regularizer.gradient_regularize(p, g)
 			acc = theano.shared(p.get_value() * 0.)
 			acc_new = self.rho * acc + (1 - self.rho) * g ** 2
 			updates.append((acc, acc_new))
 
 			updated_p = p - self.lr * (g / T.sqrt(acc_new + self.epsilon))
-			updated_p = self.regularizer.regularize(updated_p)
+			updated_p = self.regularizer.weight_regularize(updated_p)
 			updates.append((p, updated_p))
 		return updates
 
@@ -132,19 +139,20 @@ class Adagrad(Update):
 		grads = T.grad(cost, params)
 		grads = clip_norms(grads, self.clipnorm)
 		for p,g in zip(params,grads):
+			g = self.regularizer.gradient_regularize(p, g)
 			acc = theano.shared(p.get_value() * 0.)
 			acc_new += g ** 2
 			updates.append((acc, acc_new))
 
 			updated_p = p - (self.lr / T.sqrt(acc_new + self.epsilon)) * g
-			updated_p = self.regularizer.regularize(updated_p)
+			updated_p = self.regularizer.weight_regularize(updated_p)
 			updates.append((p, updated_p))
 		return updates	
 
 
 class Adadelta(Update):
 
-	def __init__(self, lr=1., rho=0.95, epsilon=1e-6, *args, **kwargs):
+	def __init__(self, lr=0.5, rho=0.95, epsilon=1e-6, *args, **kwargs):
 		Update.__init__(self, *args, **kwargs)
 		self.__dict__.update(locals())
 
@@ -153,6 +161,7 @@ class Adadelta(Update):
 		grads = T.grad(cost, params)
 		grads = clip_norms(grads, self.clipnorm)
 		for p,g in zip(params,grads):
+			g = self.regularizer.gradient_regularize(p, g)
 			acc = theano.shared(p.get_value() * 0.)
 			acc_delta = theano.shared(p.get_value() * 0.)
 			acc_new = self.rho * acc + (1 - self.rho) * g ** 2
@@ -160,7 +169,7 @@ class Adadelta(Update):
 
 			update = g * T.sqrt(acc_delta + self.epsilon) / T.sqrt(acc_new + self.epsilon)
 			updated_p = p - self.lr * update
-			updated_p = self.regularizer.regularize(updated_p)
+			updated_p = self.regularizer.weight_regularize(updated_p)
 			updates.append((p, updated_p))
 
 			acc_delta_new = self.rho * acc_delta + (1 - self.rho) * update ** 2
