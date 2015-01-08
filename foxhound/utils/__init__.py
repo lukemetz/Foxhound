@@ -1,6 +1,4 @@
 import numpy as np
-import theano
-import theano.tensor as T
 
 def iter_data(*data, **kwargs):
     size = kwargs.get('size', 128)
@@ -36,12 +34,16 @@ def shuffle(*data):
         return [d[idxs] for d in data]
 
 def floatX(X):
+    import theano
     return np.asarray(X, dtype=theano.config.floatX)
 
 def intX(X):
     return np.asarray(X, dtype='int32')
 
-def sharedX(X, dtype=theano.config.floatX):
+def sharedX(X, dtype=None):
+    import theano
+    if dtype is None:
+        dtype = theano.config.floatX
     return theano.shared(np.asarray(X, dtype=dtype))
 
 def downcast_float(X):
